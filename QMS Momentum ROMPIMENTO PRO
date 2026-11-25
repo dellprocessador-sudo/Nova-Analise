@@ -1,0 +1,258 @@
+
+instrument {
+name = "QMS MOMENTUM ROMPIMENTO PRO",
+short_name = "QMS MOMENTUM PRO",
+icon = "indicators:MACD",
+overlay = false
+}
+
+-- =========================================
+-- 1. CONFIGURACOES
+-- =========================================
+
+input_group {
+"MOMENTUM",
+
+periodo_momentum = input {
+default = 10,
+type = input.integer,
+min = 2,
+max = 50
+},
+
+suavizacao = input {
+default = 3,
+type = input.integer,
+min = 1,
+max = 20
+},
+
+exigir_aceleracao = input {
+default = true,
+type = input.boolean
+}
+
+}
+
+input_group {
+"ESTRUTURA DE ROMPIMENTO",
+
+periodo = input {
+default = 20,
+type = input.integer,
+min = 5,
+max = 100
+},
+
+corpo_minimo = input {
+default = 45,
+type = input.integer,
+min = 10,
+max = 90
+},
+
+fechamento_minimo = input {
+default = 70,
+type = input.integer,
+min = 50,
+max = 95
+}
+
+}
+
+input_group {
+"CORES",
+
+cor_compra = input {
+default = "#00C853",
+type = input.color
+},
+
+cor_venda = input {
+default = "#FF3030",
+type = input.color
+},
+
+cor_neutra = input {
+default = "#808080",
+type = input.color
+}
+
+}
+
+-- =========================================
+-- 2. MOMENTUM
+-- =========================================
+
+momentum_bruto =
+close - close[periodo_momentum]
+
+momentum_linha =
+ema(momentum_bruto, suavizacao)
+
+momentum_anterior =
+momentum_linha[1]
+
+-- =========================================
+-- 3. DIRECAO DO MOMENTUM
+-- =========================================
+
+momentum_compra =
+momentum_linha > 0 and
+(
+not exigir_aceleracao or
+momentum_linha > momentum_anterior
+)
+
+momentum_venda =
+momentum_linha < 0 and
+(
+not exigir_aceleracao or
+momentum_linha < momentum_anterior
+)
+
+-- =========================================
+-- 4. ESTRUTURA DO MERCADO
+-- =========================================
+
+resistencia =
+highest(high[1], periodo)
+
+suporte =
+lowest(low[1], periodo)
+
+amplitude = high - low
+
+corpo = abs(close - open)
+
+corpo_percentual =
+corpo / (amplitude + 0.0000001) * 100
+
+posicao_fechamento =
+(close - low) /
+(amplitude + 0.0000001) * 100
+
+candle_comprador =
+close > open and
+corpo_percentual >= corpo_minimo and
+posicao_fechamento >= fechamento_minimo
+
+candle_vendedor =
+close < open and
+corpo_percentual >= corpo_minimo and
+posicao_fechamento <=
+(100 - fechamento_minimo)
+
+-- =========================================
+-- 5. ROMPIMENTOS
+-- =========================================
+
+rompimento_alta =
+close > resistencia and
+close[1] <= resistencia[1]
+
+rompimento_baixa =
+close < suporte and
+close[1] >= suporte[1]
+
+-- =========================================
+-- 6. CONFIRMACAO FINAL
+-- =========================================
+
+call_forte =
+rompimento_alta and
+candle_comprador and
+momentum_compra
+
+put_forte =
+rompimento_baixa and
+candle_vendedor and
+momentum_venda
+
+-- =========================================
+-- 7. COR DA LINHA
+-- =========================================
+
+cor_linha = cor_neutra
+
+if momentum_compra then
+cor_linha = cor_compra
+end
+
+if momentum_venda then
+cor_linha = cor_venda
+end
+
+-- =========================================
+-- 8. LINHA MOMENTUM
+-- =========================================
+
+plot(
+momentum_linha,
+"MOMENTUM",
+cor_linha,
+3
+)
+
+-- =========================================
+-- 9. LINHA ZERO
+-- =========================================
+
+plot(
+0,
+"LINHA ZERO",
+cor_neutra,
+1
+)
+
+-- =========================================
+-- 10. SINAIS DE ROMPIMENTO
+-- =========================================
+
+plot_shape(
+call_forte,
+"CALL ROMPIMENTO",
+shape_style.triangleup,
+shape_size.large,
+cor_compra,
+shape_location.bottom
+)
+
+plot_shape(
+put_forte,
+"PUT ROMPIMENTO",
+shape_style.triangledown,
+shape_size.large,
+cor_venda,
+shape_location.top
+)
+
+-- =========================================
+-- 11. MUDANCA DE DIRECAO
+-- =========================================
+
+cruzamento_compra =
+momentum_linha > 0 and
+momentum_linha[1] <= 0
+
+cruzamento_venda =
+momentum_linha < 0 and
+momentum_linha[1] >= 0
+
+plot_shape(
+cruzamento_compra,
+"MOMENTUM POSITIVO",
+shape_style.circle,
+shape_size.small,
+cor_compra,
+shape_location.bottom
+)
+
+plot_shape(
+cruzamento_venda,
+"MOMENTUM NEGATIVO",
+shape_style.circle,
+shape_size.small,
+cor_venda,
+shape_location.top
+)
