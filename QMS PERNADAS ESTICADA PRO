@@ -1,0 +1,308 @@
+
+instrument {
+    name = "QMS PERNADA ESTICADA PRO",
+    short_name = "QMS ESTICADA",
+    icon = "indicators:ATR",
+    overlay = false
+}
+
+-- =========================================
+-- 1. CONFIGURACOES
+-- =========================================
+
+input_group {
+    "SENSIBILIDADE",
+
+    periodo_ema = input {
+        default = 21,
+        type = input.integer,
+        min = 5,
+        max = 100
+    },
+
+    periodo_atr = input {
+        default = 14,
+        type = input.integer,
+        min = 5,
+        max = 50
+    },
+
+    periodo_movimento = input {
+        default = 8,
+        type = input.integer,
+        min = 3,
+        max = 30
+    }
+}
+
+input_group {
+    "NIVEIS DE ESTICAMENTO",
+
+    nivel_alerta = input {
+        default = 60,
+        type = input.integer,
+        min = 30,
+        max = 90
+    },
+
+    nivel_extremo = input {
+        default = 80,
+        type = input.integer,
+        min = 50,
+        max = 100
+    }
+}
+
+input_group {
+    "CORES",
+
+    cor_alta = input {
+        default = "#FF9800",
+        type = input.color
+    },
+
+    cor_baixa = input {
+        default = "#00BFFF",
+        type = input.color
+    },
+
+    cor_extremo = input {
+        default = "#FF1744",
+        type = input.color
+    },
+
+    cor_neutra = input {
+        default = "#808080",
+        type = input.color
+    }
+}
+
+-- =========================================
+-- 2. INDICADORES BASE
+-- =========================================
+
+media = ema(close, periodo_ema)
+
+volatilidade = atr(periodo_atr)
+
+distancia =
+abs(close - media) /
+(volatilidade + 0.0000001)
+
+movimento =
+abs(close - close[periodo_movimento]) /
+(volatilidade + 0.0000001)
+
+-- =========================================
+-- 3. DIRECAO DA PERNADA
+-- =========================================
+
+alta =
+close > media and
+close > close[1]
+
+baixa =
+close < media and
+close < close[1]
+
+-- =========================================
+-- 4. SEQUENCIA DE CANDLES
+-- =========================================
+
+alta_0 = close > open
+alta_1 = close[1] > open[1]
+alta_2 = close[2] > open[2]
+alta_3 = close[3] > open[3]
+
+baixa_0 = close < open
+baixa_1 = close[1] < open[1]
+baixa_2 = close[2] < open[2]
+baixa_3 = close[3] < open[3]
+
+sequencia_alta =
+(alta_0 and 1 or 0) +
+(alta_1 and 1 or 0) +
+(alta_2 and 1 or 0) +
+(alta_3 and 1 or 0)
+
+sequencia_baixa =
+(baixa_0 and 1 or 0) +
+(baixa_1 and 1 or 0) +
+(baixa_2 and 1 or 0) +
+(baixa_3 and 1 or 0)
+
+-- =========================================
+-- 5. MOMENTUM
+-- =========================================
+
+momento =
+close - close[periodo_movimento]
+
+momento_anterior =
+momento[1]
+
+desaceleracao_alta =
+momento > 0 and
+momento < momento_anterior
+
+desaceleracao_baixa =
+momento < 0 and
+momento > momento_anterior
+
+-- =========================================
+-- 6. PONTUACAO DE ESTICAMENTO
+-- =========================================
+
+pontos_distancia = 0
+
+if distancia >= 1.5 then
+    pontos_distancia = 30
+end
+
+if distancia >= 2.0 then
+    pontos_distancia = 40
+end
+
+if distancia >= 2.5 then
+    pontos_distancia = 50
+end
+
+pontos_movimento = 0
+
+if movimento >= 2 then
+    pontos_movimento = 20
+end
+
+if movimento >= 3 then
+    pontos_movimento = 30
+end
+
+pontos_sequencia_alta =
+sequencia_alta >= 3 and 15 or 0
+
+pontos_sequencia_baixa =
+sequencia_baixa >= 3 and 15 or 0
+
+pontos_desaceleracao_alta =
+desaceleracao_alta and 10 or 0
+
+pontos_desaceleracao_baixa =
+desaceleracao_baixa and 10 or 0
+
+-- =========================================
+-- 7. RESULTADO FINAL
+-- =========================================
+
+pontuacao_alta =
+pontos_distancia +
+pontos_movimento +
+pontos_sequencia_alta +
+pontos_desaceleracao_alta
+
+pontuacao_baixa =
+pontos_distancia +
+pontos_movimento +
+pontos_sequencia_baixa +
+pontos_desaceleracao_baixa
+
+-- Limite de 100 pontos
+
+pontuacao_alta =
+pontuacao_alta > 100 and 100 or pontuacao_alta
+
+pontuacao_baixa =
+pontuacao_baixa > 100 and 100 or pontuacao_baixa
+
+-- =========================================
+-- 8. SEPARACAO POR DIRECAO
+-- =========================================
+
+esticamento_alta =
+alta and pontuacao_alta or 0
+
+esticamento_baixa =
+baixa and pontuacao_baixa or 0
+
+-- =========================================
+-- 9. NIVEIS VISUAIS
+-- =========================================
+
+plot(esticamento_alta,
+"ESTICAMENTO ALTA",
+cor_alta, 3)
+
+plot(esticamento_baixa,
+"ESTICAMENTO BAIXA",
+cor_baixa, 3)
+
+plot(nivel_alerta,
+"ALERTA",
+cor_neutra, 1)
+
+plot(nivel_extremo,
+"EXTREMO",
+cor_extremo, 2)
+
+plot(0,
+"ZERO",
+cor_neutra, 1)
+
+-- =========================================
+-- 10. ALERTAS DE ESTICAMENTO
+-- =========================================
+
+alerta_alta =
+alta and
+pontuacao_alta >= nivel_alerta
+
+alerta_baixa =
+baixa and
+pontuacao_baixa >= nivel_alerta
+
+extremo_alta =
+alta and
+pontuacao_alta >= nivel_extremo
+
+extremo_baixa =
+baixa and
+pontuacao_baixa >= nivel_extremo
+
+-- =========================================
+-- 11. MARCACAO DE EXAUSTAO
+-- =========================================
+
+plot_shape(
+alerta_alta,
+"ALTA ESTICADA",
+shape_style.triangledown,
+shape_size.large,
+cor_alta,
+shape_location.top
+)
+
+plot_shape(
+alerta_baixa,
+"BAIXA ESTICADA",
+shape_style.triangleup,
+shape_size.large,
+cor_baixa,
+shape_location.bottom
+)
+
+plot_shape(
+extremo_alta,
+"ALTA EXTREMA",
+shape_style.triangledown,
+shape_size.large,
+cor_extremo,
+shape_location.top
+)
+
+plot_shape(
+extremo_baixa,
+"BAIXA EXTREMA",
+shape_style.triangleup,
+shape_size.large,
+cor_extremo,
+shape_location.bottom
+)
