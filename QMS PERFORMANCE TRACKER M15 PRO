@@ -1,0 +1,512 @@
+
+instrument {
+    name = "QMS PERFORMANCE TRACKER M15 PRO",
+    short_name = "QMS M15",
+    icon = "indicators:MACD",
+    overlay = false
+}
+
+-- =========================================
+-- 1. CONFIGURACOES
+-- =========================================
+
+input_group {
+    "TENDENCIA",
+
+    periodo_rapido = input {
+        default = 21,
+        type = input.integer,
+        min = 5,
+        max = 50
+    },
+
+    periodo_lento = input {
+        default = 50,
+        type = input.integer,
+        min = 10,
+        max = 100
+    },
+
+    periodo_longo = input {
+        default = 200,
+        type = input.integer,
+        min = 50,
+        max = 300
+    }
+}
+
+input_group {
+    "DESEMPENHO",
+
+    periodo_momentum = input {
+        default = 5,
+        type = input.integer,
+        min = 2,
+        max = 20
+    },
+
+    periodo_atr = input {
+        default = 14,
+        type = input.integer,
+        min = 5,
+        max = 30
+    },
+
+    periodo_eficiencia = input {
+        default = 8,
+        type = input.integer,
+        min = 3,
+        max = 20
+    }
+}
+
+input_group {
+    "LIMITES",
+
+    nivel_forte = input {
+        default = 65,
+        type = input.integer,
+        min = 40,
+        max = 90
+    },
+
+    nivel_extremo = input {
+        default = 85,
+        type = input.integer,
+        min = 60,
+        max = 100
+    },
+
+    distancia_esticada = input {
+        default = 2,
+        type = input.integer,
+        min = 1,
+        max = 5
+    }
+}
+
+input_group {
+    "CORES",
+
+    cor_alta = input {
+        default = "#00C853",
+        type = input.color
+    },
+
+    cor_baixa = input {
+        default = "#FF3030",
+        type = input.color
+    },
+
+    cor_desaceleracao = input {
+        default = "#FFD700",
+        type = input.color
+    },
+
+    cor_reversao = input {
+        default = "#A020F0",
+        type = input.color
+    },
+
+    cor_neutra = input {
+        default = "#808080",
+        type = input.color
+    }
+}
+
+-- =========================================
+-- 2. MEDIAS DE TENDENCIA
+-- =========================================
+
+ema21 = ema(close, periodo_rapido)
+ema50 = ema(close, periodo_lento)
+ema200 = ema(close, periodo_longo)
+
+tendencia_alta =
+close > ema21 and
+ema21 > ema50
+
+tendencia_baixa =
+close < ema21 and
+ema21 < ema50
+
+tendencia_longa_alta =
+close > ema200
+
+tendencia_longa_baixa =
+close < ema200
+
+inclinacao_alta =
+ema21 > ema21[2]
+
+inclinacao_baixa =
+ema21 < ema21[2]
+
+-- =========================================
+-- 3. MOMENTUM
+-- =========================================
+
+momentum =
+close - close[periodo_momentum]
+
+momentum_anterior = momentum[1]
+
+acelerando_alta =
+momentum > 0 and
+momentum > momentum_anterior
+
+acelerando_baixa =
+momentum < 0 and
+momentum < momentum_anterior
+
+perdendo_alta =
+momentum > 0 and
+momentum < momentum_anterior
+
+perdendo_baixa =
+momentum < 0 and
+momentum > momentum_anterior
+
+-- =========================================
+-- 4. VOLATILIDADE E ESTICAMENTO
+-- =========================================
+
+atr_valor = atr(periodo_atr)
+
+distancia_ema =
+abs(close - ema21) /
+(atr_valor + 0.000001)
+
+esticada_alta =
+close > ema21 and
+distancia_ema >= distancia_esticada
+
+esticada_baixa =
+close < ema21 and
+distancia_ema >= distancia_esticada
+
+-- =========================================
+-- 5. EFICIENCIA DA PERNADA
+-- =========================================
+
+variacao_total =
+abs(close - close[periodo_eficiencia])
+
+variacao_1 =
+abs(close - close[1])
+
+variacao_2 =
+abs(close[1] - close[2])
+
+variacao_3 =
+abs(close[2] - close[3])
+
+variacao_4 =
+abs(close[3] - close[4])
+
+variacao_5 =
+abs(close[4] - close[5])
+
+variacao_6 =
+abs(close[5] - close[6])
+
+variacao_7 =
+abs(close[6] - close[7])
+
+soma_variacoes =
+variacao_1 +
+variacao_2 +
+variacao_3 +
+variacao_4 +
+variacao_5 +
+variacao_6 +
+variacao_7
+
+eficiencia =
+variacao_total /
+(soma_variacoes + 0.000001)
+
+eficiencia_forte =
+eficiencia >= 0.55
+
+-- =========================================
+-- 6. FORCA DOS CANDLES
+-- =========================================
+
+amplitude = high - low
+
+corpo = abs(close - open)
+
+forca_candle =
+corpo / (amplitude + 0.000001) * 100
+
+candle_alta =
+close > open and
+forca_candle >= 35
+
+candle_baixa =
+close < open and
+forca_candle >= 35
+
+-- =========================================
+-- 7. PONTUACAO DE ALTA
+-- =========================================
+
+alta_tendencia =
+tendencia_alta and 25 or 0
+
+alta_longa =
+tendencia_longa_alta and 10 or 0
+
+alta_inclinacao =
+inclinacao_alta and 15 or 0
+
+alta_momentum =
+momentum > 0 and 15 or 0
+
+alta_aceleracao =
+acelerando_alta and 10 or 0
+
+alta_eficiencia =
+eficiencia_forte and 10 or 0
+
+alta_candle =
+candle_alta and 10 or 0
+
+alta_extensao =
+not esticada_alta and 10 or 0
+
+pontuacao_alta =
+alta_tendencia +
+alta_longa +
+alta_inclinacao +
+alta_momentum +
+alta_aceleracao +
+alta_eficiencia +
+alta_candle +
+alta_extensao
+
+pontuacao_alta =
+pontuacao_alta > 100 and 100 or pontuacao_alta
+
+-- =========================================
+-- 8. PONTUACAO DE BAIXA
+-- =========================================
+
+baixa_tendencia =
+tendencia_baixa and 25 or 0
+
+baixa_longa =
+tendencia_longa_baixa and 10 or 0
+
+baixa_inclinacao =
+inclinacao_baixa and 15 or 0
+
+baixa_momentum =
+momentum < 0 and 15 or 0
+
+baixa_aceleracao =
+acelerando_baixa and 10 or 0
+
+baixa_eficiencia =
+eficiencia_forte and 10 or 0
+
+baixa_candle =
+candle_baixa and 10 or 0
+
+baixa_extensao =
+not esticada_baixa and 10 or 0
+
+pontuacao_baixa =
+baixa_tendencia +
+baixa_longa +
+baixa_inclinacao +
+baixa_momentum +
+baixa_aceleracao +
+baixa_eficiencia +
+baixa_candle +
+baixa_extensao
+
+pontuacao_baixa =
+pontuacao_baixa > 100 and 100 or pontuacao_baixa
+
+-- =========================================
+-- 9. DESEMPENHO ATUAL
+-- =========================================
+
+desempenho_alta =
+tendencia_alta and pontuacao_alta or 0
+
+desempenho_baixa =
+tendencia_baixa and -pontuacao_baixa or 0
+
+plot(
+desempenho_alta,
+"DESEMPENHO ALTA",
+cor_alta,
+3
+)
+
+plot(
+desempenho_baixa,
+"DESEMPENHO BAIXA",
+cor_baixa,
+3
+)
+
+-- =========================================
+-- 10. NIVEIS DE DESEMPENHO
+-- =========================================
+
+plot(
+nivel_forte,
+"FORCA",
+cor_neutra,
+1
+)
+
+plot(
+nivel_extremo,
+"FORCA EXTREMA",
+cor_alta,
+1
+)
+
+plot(
+-nivel_forte,
+"FORCA VENDA",
+cor_neutra,
+1
+)
+
+plot(
+-nivel_extremo,
+"FORCA VENDA EXTREMA",
+cor_baixa,
+1
+)
+
+plot(
+0,
+"NEUTRO",
+cor_neutra,
+1
+)
+
+-- =========================================
+-- 11. DETECTOR DE DESACELERACAO
+-- =========================================
+
+desaceleracao_alta =
+pontuacao_alta[1] >= nivel_forte and
+pontuacao_alta < pontuacao_alta[1] and
+perdendo_alta
+
+desaceleracao_baixa =
+pontuacao_baixa[1] >= nivel_forte and
+pontuacao_baixa < pontuacao_baixa[1] and
+perdendo_baixa
+
+plot_shape(
+desaceleracao_alta,
+"ALTA PERDENDO FORCA",
+shape_style.triangledown,
+shape_size.small,
+cor_desaceleracao,
+shape_location.top
+)
+
+plot_shape(
+desaceleracao_baixa,
+"BAIXA PERDENDO FORCA",
+shape_style.triangleup,
+shape_size.small,
+cor_desaceleracao,
+shape_location.bottom
+)
+
+-- =========================================
+-- 12. DETECTOR DE ESTICAMENTO
+-- =========================================
+
+plot_shape(
+esticada_alta,
+"ALTA ESTICADA",
+shape_style.triangledown,
+shape_size.small,
+cor_desaceleracao,
+shape_location.top
+)
+
+plot_shape(
+esticada_baixa,
+"BAIXA ESTICADA",
+shape_style.triangleup,
+shape_size.small,
+cor_desaceleracao,
+shape_location.bottom
+)
+
+-- =========================================
+-- 13. POSSIVEL MUDANCA DE DIRECAO
+-- =========================================
+
+possivel_reversao_baixa =
+desaceleracao_alta and
+close < open and
+close < close[1]
+
+possivel_reversao_alta =
+desaceleracao_baixa and
+close > open and
+close > close[1]
+
+plot_shape(
+possivel_reversao_baixa,
+"POSSIVEL REVERSAO BAIXA",
+shape_style.triangledown,
+shape_size.large,
+cor_reversao,
+shape_location.top
+)
+
+plot_shape(
+possivel_reversao_alta,
+"POSSIVEL REVERSAO ALTA",
+shape_style.triangleup,
+shape_size.large,
+cor_reversao,
+shape_location.bottom
+)
+
+-- =========================================
+-- 14. FORCA MAXIMA
+-- =========================================
+
+forca_maxima_alta =
+pontuacao_alta >= nivel_extremo and
+acelerando_alta and
+not esticada_alta
+
+forca_maxima_baixa =
+pontuacao_baixa >= nivel_extremo and
+acelerando_baixa and
+not esticada_baixa
+
+plot_shape(
+forca_maxima_alta,
+"PERNA ALTA MUITO FORTE",
+shape_style.triangleup,
+shape_size.large,
+cor_alta,
+shape_location.bottom
+)
+
+plot_shape(
+forca_maxima_baixa,
+"PERNA BAIXA MUITO FORTE",
+shape_style.triangledown,
+shape_size.large,
+cor_baixa,
+shape_location.top
+)
