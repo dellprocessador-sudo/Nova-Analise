@@ -1,0 +1,348 @@
+
+instrument {
+    name = "QMS 3 SOLDADOS 3 CORVOS PROJECAO LONGA",
+    short_name = "QMS 3S3C LONGO",
+    icon = "indicators:MACD",
+    overlay = false
+}
+
+-- =========================================
+-- 1. CONFIGURACOES
+-- =========================================
+
+input_group {
+    "PADROES 3 SOLDADOS E 3 CORVOS",
+
+    corpo_minimo = input {
+        default = 45,
+        type = input.integer,
+        min = 10,
+        max = 90
+    },
+
+    exigir_progressao = input {
+        default = true,
+        type = input.boolean
+    }
+}
+
+input_group {
+    "MOMENTUM",
+
+    periodo_momentum = input {
+        default = 10,
+        type = input.integer,
+        min = 2,
+        max = 50
+    },
+
+    suavizacao = input {
+        default = 3,
+        type = input.integer,
+        min = 1,
+        max = 20
+    },
+
+    exigir_aceleracao = input {
+        default = true,
+        type = input.boolean
+    }
+}
+
+input_group {
+    "PROJECOES LONGAS",
+
+    multiplicador_1 = input {
+        default = 150,
+        type = input.integer,
+        min = 100,
+        max = 300
+    },
+
+    multiplicador_2 = input {
+        default = 200,
+        type = input.integer,
+        min = 100,
+        max = 400
+    },
+
+    multiplicador_3 = input {
+        default = 300,
+        type = input.integer,
+        min = 100,
+        max = 500
+    }
+}
+
+input_group {
+    "CORES",
+
+    cor_compra = input {
+        default = "#00C853",
+        type = input.color
+    },
+
+    cor_venda = input {
+        default = "#FF3030",
+        type = input.color
+    },
+
+    cor_projecao = input {
+        default = "#FFD700",
+        type = input.color
+    },
+
+    cor_neutra = input {
+        default = "#808080",
+        type = input.color
+    }
+}
+
+-- =========================================
+-- 2. FORCA DOS TRES CANDLES
+-- =========================================
+
+amplitude_0 = high - low
+amplitude_1 = high[1] - low[1]
+amplitude_2 = high[2] - low[2]
+
+corpo_0 = abs(close - open)
+corpo_1 = abs(close[1] - open[1])
+corpo_2 = abs(close[2] - open[2])
+
+forca_0 =
+corpo_0 / (amplitude_0 + 0.0000001) * 100
+
+forca_1 =
+corpo_1 / (amplitude_1 + 0.0000001) * 100
+
+forca_2 =
+corpo_2 / (amplitude_2 + 0.0000001) * 100
+
+candle_forte_0 = forca_0 >= corpo_minimo
+candle_forte_1 = forca_1 >= corpo_minimo
+candle_forte_2 = forca_2 >= corpo_minimo
+
+-- =========================================
+-- 3. TRES SOLDADOS
+-- =========================================
+
+soldado_1 = close[2] > open[2]
+soldado_2 = close[1] > open[1]
+soldado_3 = close > open
+
+progressao_alta =
+close > close[1] and
+close[1] > close[2]
+
+tres_soldados =
+soldado_1 and
+soldado_2 and
+soldado_3 and
+candle_forte_0 and
+candle_forte_1 and
+candle_forte_2 and
+(
+    not exigir_progressao or
+    progressao_alta
+)
+
+-- =========================================
+-- 4. TRES CORVOS
+-- =========================================
+
+corvo_1 = close[2] < open[2]
+corvo_2 = close[1] < open[1]
+corvo_3 = close < open
+
+progressao_baixa =
+close < close[1] and
+close[1] < close[2]
+
+tres_corvos =
+corvo_1 and
+corvo_2 and
+corvo_3 and
+candle_forte_0 and
+candle_forte_1 and
+candle_forte_2 and
+(
+    not exigir_progressao or
+    progressao_baixa
+)
+
+-- =========================================
+-- 5. MOMENTUM
+-- =========================================
+
+momentum_bruto =
+(close / (close[periodo_momentum] + 0.0000001) - 1) * 100
+
+momentum =
+ema(momentum_bruto, suavizacao)
+
+momentum_anterior = momentum[1]
+
+momentum_compra =
+momentum > 0 and
+(
+    not exigir_aceleracao or
+    momentum > momentum_anterior
+)
+
+momentum_venda =
+momentum < 0 and
+(
+    not exigir_aceleracao or
+    momentum < momentum_anterior
+)
+
+-- =========================================
+-- 6. CONFIRMACAO DOS PADROES
+-- =========================================
+
+sinal_compra =
+tres_soldados and
+momentum_compra
+
+sinal_venda =
+tres_corvos and
+momentum_venda
+
+-- =========================================
+-- 7. IMPULSO DOS PADROES
+-- =========================================
+
+impulso_alta =
+(close / (close[3] + 0.0000001) - 1) * 100
+
+impulso_baixa =
+(close[3] / (close + 0.0000001) - 1) * 100
+
+impulso_compra =
+sinal_compra and impulso_alta or 0
+
+impulso_venda =
+sinal_venda and impulso_baixa or 0
+
+-- =========================================
+-- 8. PROJECOES DE ALVOS
+-- =========================================
+
+projecao_compra_1 =
+impulso_compra * multiplicador_1 / 100
+
+projecao_compra_2 =
+impulso_compra * multiplicador_2 / 100
+
+projecao_compra_3 =
+impulso_compra * multiplicador_3 / 100
+
+projecao_venda_1 =
+-impulso_venda * multiplicador_1 / 100
+
+projecao_venda_2 =
+-impulso_venda * multiplicador_2 / 100
+
+projecao_venda_3 =
+-impulso_venda * multiplicador_3 / 100
+
+-- =========================================
+-- 9. LINHA PRINCIPAL MOMENTUM
+-- =========================================
+
+cor_linha = cor_neutra
+
+if momentum_compra then
+    cor_linha = cor_compra
+end
+
+if momentum_venda then
+    cor_linha = cor_venda
+end
+
+plot(
+    momentum,
+    "MOMENTUM",
+    cor_linha,
+    3
+)
+
+plot(
+    0,
+    "LINHA ZERO",
+    cor_neutra,
+    1
+)
+
+-- =========================================
+-- 10. PROJECOES DE ALTA
+-- =========================================
+
+plot(
+    projecao_compra_1,
+    "COMPRA ALVO 1",
+    cor_compra,
+    1
+)
+
+plot(
+    projecao_compra_2,
+    "COMPRA ALVO 2",
+    cor_compra,
+    2
+)
+
+plot(
+    projecao_compra_3,
+    "COMPRA ALVO 3",
+    cor_projecao,
+    3
+)
+
+-- =========================================
+-- 11. PROJECOES DE BAIXA
+-- =========================================
+
+plot(
+    projecao_venda_1,
+    "VENDA ALVO 1",
+    cor_venda,
+    1
+)
+
+plot(
+    projecao_venda_2,
+    "VENDA ALVO 2",
+    cor_venda,
+    2
+)
+
+plot(
+    projecao_venda_3,
+    "VENDA ALVO 3",
+    cor_projecao,
+    3
+)
+
+-- =========================================
+-- 12. SINAIS DOS PADROES
+-- =========================================
+
+plot_shape(
+    sinal_compra,
+    "3 SOLDADOS PROJECAO LONGA",
+    shape_style.triangleup,
+    shape_size.large,
+    cor_compra,
+    shape_location.bottom
+)
+
+plot_shape(
+    sinal_venda,
+    "3 CORVOS PROJECAO LONGA",
+    shape_style.triangledown,
+    shape_size.large,
+    cor_venda,
+    shape_location.top
+)
