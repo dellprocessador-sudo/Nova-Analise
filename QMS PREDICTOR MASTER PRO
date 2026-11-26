@@ -1,0 +1,685 @@
+
+instrument {
+    name = "QMS PREDICTOR MASTER PRO",
+    short_name = "QMS MASTER PRO",
+    icon = "indicators:MACD",
+    overlay = false
+}
+
+-- =========================================
+-- 1. CONFIGURACOES
+-- =========================================
+
+input_group {
+    "SENSIBILIDADE GERAL",
+
+    periodo_estrutura = input {
+        default = 20,
+        type = input.integer,
+        min = 5,
+        max = 100
+    },
+
+    periodo_ema = input {
+        default = 21,
+        type = input.integer,
+        min = 5,
+        max = 100
+    },
+
+    periodo_atr = input {
+        default = 14,
+        type = input.integer,
+        min = 5,
+        max = 50
+    },
+
+    periodo_momentum = input {
+        default = 10,
+        type = input.integer,
+        min = 2,
+        max = 50
+    }
+}
+
+input_group {
+    "PADROES E FORCA",
+
+    corpo_minimo = input {
+        default = 40,
+        type = input.integer,
+        min = 10,
+        max = 90
+    },
+
+    exigir_progressao = input {
+        default = true,
+        type = input.boolean
+    },
+
+    exigir_aceleracao = input {
+        default = false,
+        type = input.boolean
+    }
+}
+
+input_group {
+    "PERNADAS E EXAUSTAO",
+
+    nivel_alerta = input {
+        default = 60,
+        type = input.integer,
+        min = 30,
+        max = 90
+    },
+
+    nivel_extremo = input {
+        default = 80,
+        type = input.integer,
+        min = 50,
+        max = 100
+    }
+}
+
+input_group {
+    "SINAIS E PROJECOES",
+
+    nivel_entrada = input {
+        default = 60,
+        type = input.integer,
+        min = 30,
+        max = 95
+    },
+
+    multiplicador_1 = input {
+        default = 150,
+        type = input.integer,
+        min = 100,
+        max = 300
+    },
+
+    multiplicador_2 = input {
+        default = 200,
+        type = input.integer,
+        min = 100,
+        max = 400
+    },
+
+    multiplicador_3 = input {
+        default = 300,
+        type = input.integer,
+        min = 100,
+        max = 500
+    }
+}
+
+input_group {
+    "CORES",
+
+    cor_alta = input {
+        default = "#2196FF",
+        type = input.color
+    },
+
+    cor_baixa = input {
+        default = "#A020F0",
+        type = input.color
+    },
+
+    cor_projecao = input {
+        default = "#FFD700",
+        type = input.color
+    },
+
+    cor_alerta = input {
+        default = "#FF3030",
+        type = input.color
+    },
+
+    cor_neutra = input {
+        default = "#808080",
+        type = input.color
+    }
+}
+
+-- =========================================
+-- 2. INDICADORES BASE
+-- =========================================
+
+ema_base = ema(close, periodo_ema)
+
+atr_base = atr(periodo_atr)
+
+distancia_ema =
+    abs(close - ema_base) /
+    (atr_base + 0.0000001)
+
+movimento =
+    abs(close - close[periodo_momentum]) /
+    (atr_base + 0.0000001)
+
+momentum_bruto =
+    (close / (close[periodo_momentum] + 0.0000001) - 1) * 100
+
+momentum = ema(momentum_bruto, 3)
+
+aceleracao =
+    momentum - momentum[1]
+
+-- =========================================
+-- 3. FORCA DOS CANDLES
+-- =========================================
+
+amplitude = high - low
+
+corpo = abs(close - open)
+
+forca =
+    corpo / (amplitude + 0.0000001) * 100
+
+forte = forca >= corpo_minimo
+
+forte_anterior =
+    abs(close[1] - open[1]) /
+    (high[1] - low[1] + 0.0000001) * 100 >= corpo_minimo
+
+comprador = close > open
+
+vendedor = close < open
+
+pressao_alta =
+    close[1] > open[1] and
+    close[2] > open[2]
+
+pressao_baixa =
+    close[1] < open[1] and
+    close[2] < open[2]
+
+-- =========================================
+-- 4. TRES SOLDADOS
+-- =========================================
+
+soldado_1 = close[2] > open[2]
+soldado_2 = close[1] > open[1]
+soldado_3 = close > open
+
+progressao_alta =
+    close > close[1] and
+    close[1] > close[2]
+
+tres_soldados =
+    soldado_1 and
+    soldado_2 and
+    soldado_3 and
+    forte and
+    forte_anterior and
+    (
+        not exigir_progressao or
+        progressao_alta
+    )
+
+-- =========================================
+-- 5. TRES CORVOS
+-- =========================================
+
+corvo_1 = close[2] < open[2]
+corvo_2 = close[1] < open[1]
+corvo_3 = close < open
+
+progressao_baixa =
+    close < close[1] and
+    close[1] < close[2]
+
+tres_corvos =
+    corvo_1 and
+    corvo_2 and
+    corvo_3 and
+    forte and
+    forte_anterior and
+    (
+        not exigir_progressao or
+        progressao_baixa
+    )
+
+-- =========================================
+-- 6. MONITOR DE ROMPIMENTO
+-- =========================================
+
+resistencia =
+    highest(high[1], periodo_estrutura)
+
+suporte =
+    lowest(low[1], periodo_estrutura)
+
+resistencia_anterior =
+    highest(high[2], periodo_estrutura)
+
+suporte_anterior =
+    lowest(low[2], periodo_estrutura)
+
+rompimento_alta =
+    close > resistencia and
+    close[1] <= resistencia[1]
+
+rompimento_baixa =
+    close < suporte and
+    close[1] >= suporte[1]
+
+reteste_alta =
+    close[1] > resistencia_anterior and
+    low <= resistencia_anterior and
+    close > resistencia_anterior and
+    close > open
+
+reteste_baixa =
+    close[1] < suporte_anterior and
+    high >= suporte_anterior and
+    close < suporte_anterior and
+    close < open
+
+falso_alta =
+    close[1] > resistencia[1] and
+    close < resistencia
+
+falso_baixa =
+    close[1] < suporte[1] and
+    close > suporte
+
+-- =========================================
+-- 7. DIRECAO DA TENDENCIA
+-- =========================================
+
+tendencia_alta =
+    close > ema_base and
+    ema_base > ema_base[1]
+
+tendencia_baixa =
+    close < ema_base and
+    ema_base < ema_base[1]
+
+momentum_alta = momentum > 0
+momentum_baixa = momentum < 0
+
+acelerando_alta =
+    aceleracao > 0
+
+acelerando_baixa =
+    aceleracao < 0
+
+-- =========================================
+-- 8. ESTICAMENTO DA PERNADA
+-- =========================================
+
+pontos_distancia = 0
+
+if distancia_ema >= 1.5 then
+    pontos_distancia = 30
+end
+
+if distancia_ema >= 2.0 then
+    pontos_distancia = 40
+end
+
+if distancia_ema >= 2.5 then
+    pontos_distancia = 50
+end
+
+pontos_movimento = 0
+
+if movimento >= 2 then
+    pontos_movimento = 20
+end
+
+if movimento >= 3 then
+    pontos_movimento = 30
+end
+
+sequencia_alta =
+    (close > open and 1 or 0) +
+    (close[1] > open[1] and 1 or 0) +
+    (close[2] > open[2] and 1 or 0) +
+    (close[3] > open[3] and 1 or 0)
+
+sequencia_baixa =
+    (close < open and 1 or 0) +
+    (close[1] < open[1] and 1 or 0) +
+    (close[2] < open[2] and 1 or 0) +
+    (close[3] < open[3] and 1 or 0)
+
+desaceleracao_alta =
+    momentum > 0 and
+    momentum < momentum[1]
+
+desaceleracao_baixa =
+    momentum < 0 and
+    momentum > momentum[1]
+
+esticamento_alta =
+    pontos_distancia +
+    pontos_movimento +
+    (sequencia_alta >= 3 and 15 or 0) +
+    (desaceleracao_alta and 10 or 0)
+
+esticamento_baixa =
+    pontos_distancia +
+    pontos_movimento +
+    (sequencia_baixa >= 3 and 15 or 0) +
+    (desaceleracao_baixa and 10 or 0)
+
+if esticamento_alta > 100 then
+    esticamento_alta = 100
+end
+
+if esticamento_baixa > 100 then
+    esticamento_baixa = 100
+end
+
+-- =========================================
+-- 9. ANTECIPACAO
+-- =========================================
+
+antecipacao_alta =
+    pressao_alta and
+    forte_anterior and
+    momentum[1] > 0 and
+    (
+        not exigir_aceleracao or
+        aceleracao > 0
+    )
+
+antecipacao_baixa =
+    pressao_baixa and
+    forte_anterior and
+    momentum[1] < 0 and
+    (
+        not exigir_aceleracao or
+        aceleracao < 0
+    )
+
+-- =========================================
+-- 10. PONTUACAO DE ALTA
+-- =========================================
+
+pontos_alta =
+    (tendencia_alta and 10 or 0) +
+    (momentum_alta and 15 or 0) +
+    (acelerando_alta and 10 or 0) +
+    (pressao_alta and 10 or 0) +
+    (tres_soldados and 20 or 0) +
+    (rompimento_alta and 20 or 0) +
+    (reteste_alta and 12 or 0) +
+    (antecipacao_alta and 8 or 0) +
+    (falso_baixa and 5 or 0)
+
+-- Penalidade por exaustao
+if esticamento_alta >= nivel_extremo then
+    pontos_alta = pontos_alta - 15
+end
+
+if falso_alta then
+    pontos_alta = pontos_alta - 20
+end
+
+if pontos_alta < 0 then
+    pontos_alta = 0
+end
+
+if pontos_alta > 100 then
+    pontos_alta = 100
+end
+
+-- =========================================
+-- 11. PONTUACAO DE BAIXA
+-- =========================================
+
+pontos_baixa =
+    (tendencia_baixa and 10 or 0) +
+    (momentum_baixa and 15 or 0) +
+    (acelerando_baixa and 10 or 0) +
+    (pressao_baixa and 10 or 0) +
+    (tres_corvos and 20 or 0) +
+    (rompimento_baixa and 20 or 0) +
+    (reteste_baixa and 12 or 0) +
+    (antecipacao_baixa and 8 or 0) +
+    (falso_alta and 5 or 0)
+
+-- Penalidade por exaustao
+if esticamento_baixa >= nivel_extremo then
+    pontos_baixa = pontos_baixa - 15
+end
+
+if falso_baixa then
+    pontos_baixa = pontos_baixa - 20
+end
+
+if pontos_baixa < 0 then
+    pontos_baixa = 0
+end
+
+if pontos_baixa > 100 then
+    pontos_baixa = 100
+end
+
+-- =========================================
+-- 12. SINAIS PRINCIPAIS
+-- =========================================
+
+sinal_alta =
+    pontos_alta >= nivel_entrada and
+    pontos_alta > pontos_baixa
+
+sinal_baixa =
+    pontos_baixa >= nivel_entrada and
+    pontos_baixa > pontos_alta
+
+-- =========================================
+-- 13. PROJECOES LONGAS
+-- =========================================
+
+fator_1 = multiplicador_1 / 100
+fator_2 = multiplicador_2 / 100
+fator_3 = multiplicador_3 / 100
+
+projecao_alta_1 =
+    pontos_alta + aceleracao * 10 * fator_1
+
+projecao_alta_2 =
+    pontos_alta + aceleracao * 10 * fator_2
+
+projecao_alta_3 =
+    pontos_alta + aceleracao * 10 * fator_3
+
+projecao_baixa_1 =
+    pontos_baixa - aceleracao * 10 * fator_1
+
+projecao_baixa_2 =
+    pontos_baixa - aceleracao * 10 * fator_2
+
+projecao_baixa_3 =
+    pontos_baixa - aceleracao * 10 * fator_3
+
+if projecao_alta_1 > 100 then
+    projecao_alta_1 = 100
+end
+
+if projecao_alta_2 > 100 then
+    projecao_alta_2 = 100
+end
+
+if projecao_alta_3 > 100 then
+    projecao_alta_3 = 100
+end
+
+if projecao_baixa_1 > 100 then
+    projecao_baixa_1 = 100
+end
+
+if projecao_baixa_2 > 100 then
+    projecao_baixa_2 = 100
+end
+
+if projecao_baixa_3 > 100 then
+    projecao_baixa_3 = 100
+end
+
+-- =========================================
+-- 14. ATIVACAO DAS PROJECOES
+-- =========================================
+
+alvo_alta_1 =
+    sinal_alta and projecao_alta_1 or 0
+
+alvo_alta_2 =
+    sinal_alta and projecao_alta_2 or 0
+
+alvo_alta_3 =
+    sinal_alta and projecao_alta_3 or 0
+
+alvo_baixa_1 =
+    sinal_baixa and projecao_baixa_1 or 0
+
+alvo_baixa_2 =
+    sinal_baixa and projecao_baixa_2 or 0
+
+alvo_baixa_3 =
+    sinal_baixa and projecao_baixa_3 or 0
+
+-- =========================================
+-- 15. LINHAS PRINCIPAIS
+-- =========================================
+
+plot(
+    pontos_alta,
+    "FORCA DE ALTA",
+    cor_alta,
+    3
+)
+
+plot(
+    pontos_baixa,
+    "FORCA DE BAIXA",
+    cor_baixa,
+    3
+)
+
+plot(
+    nivel_entrada,
+    "NIVEL DE ENTRADA",
+    cor_neutra,
+    1
+)
+
+plot(
+    50,
+    "LINHA CENTRAL",
+    cor_neutra,
+    1
+)
+
+-- =========================================
+-- 16. PROJECOES
+-- =========================================
+
+plot(
+    alvo_alta_1,
+    "ALTA ALVO 1",
+    cor_alta,
+    1
+)
+
+plot(
+    alvo_alta_2,
+    "ALTA ALVO 2",
+    cor_alta,
+    2
+)
+
+plot(
+    alvo_alta_3,
+    "ALTA ALVO LONGO",
+    cor_projecao,
+    3
+)
+
+plot(
+    alvo_baixa_1,
+    "BAIXA ALVO 1",
+    cor_baixa,
+    1
+)
+
+plot(
+    alvo_baixa_2,
+    "BAIXA ALVO 2",
+    cor_baixa,
+    2
+)
+
+plot(
+    alvo_baixa_3,
+    "BAIXA ALVO LONGO",
+    cor_projecao,
+    3
+)
+
+-- =========================================
+-- 17. MARCACOES HISTORICAS
+-- =========================================
+
+plot_shape(
+    antecipacao_alta,
+    "ANTECIPACAO ALTA",
+    shape_style.circle,
+    shape_size.small,
+    cor_alta,
+    shape_location.bottom
+)
+
+plot_shape(
+    antecipacao_baixa,
+    "ANTECIPACAO BAIXA",
+    shape_style.circle,
+    shape_size.small,
+    cor_baixa,
+    shape_location.top
+)
+
+plot_shape(
+    sinal_alta,
+    "COMPRA MASTER",
+    shape_style.triangleup,
+    shape_size.large,
+    cor_alta,
+    shape_location.bottom
+)
+
+plot_shape(
+    sinal_baixa,
+    "VENDA MASTER",
+    shape_style.triangledown,
+    shape_size.large,
+    cor_baixa,
+    shape_location.top
+)
+
+-- =========================================
+-- 18. ALERTAS DE EXAUSTAO
+-- =========================================
+
+plot_shape(
+    esticamento_alta >= nivel_alerta,
+    "EXAUSTAO POTENCIAL ALTA",
+    shape_style.triangledown,
+    shape_size.small,
+    cor_alerta,
+    shape_location.top
+)
+
+plot_shape(
+    esticamento_baixa >= nivel_alerta,
+    "EXAUSTAO POTENCIAL BAIXA",
+    shape_style.triangleup,
+    shape_size.small,
+    cor_alerta,
+    shape_location.bottom
+)
